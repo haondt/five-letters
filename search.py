@@ -1,3 +1,5 @@
+import numpy as np
+
 alphabet = 'abcdefghijklmnopqrstuvwxyz'
 alpha_mask = [1 << (ord(c) - ord('a')) for c in alphabet]
 ord_chart = {c:ord(c) - ord('a') for c in alphabet}
@@ -46,6 +48,15 @@ def get_words():
                 words.add(word)
     return list(words)
 
+def combine_words(m1, m2):
+    combined_mask = np.bitwise_or.outer(m1, m2)
+    overlap_mask = np.bitwise_and.outer(m1, m2)
+    combined_allow_mask = overlap_mask == 0
+    raveled_allow_mask = combined_allow_mask.ravel()
+    allow_mask_indices = np.where(raveled_allow_mask)[0]
+    raveled_combined_mask = combined_mask.ravel()
+    return allow_mask_indices, raveled_combined_mask
+
 def main():
     print('building initial word list...')
     words = get_words()
@@ -65,25 +76,26 @@ def main():
                 two_words[wc].append((w1, w2))
 
     print(len(two_words))
+    two_words_keys = list(two_words.keys())
+    two_words_values = list(two_words.values())
 
-    print('selecting third word...')
+    print('np selecting third word...')
     three_words: dict[int, list[tuple[int, ...]]] = {}
-    last_completion = None
-    for i, third_mask in enumerate(words):
-        completion = i/len(words)
-        if last_completion is None or completion - last_completion > 0.01:
-            last_completion = completion
-            print(f'\r{round(completion*100,2)}%', end='')
+    two_words_mask = np.array(two_words_keys, dtype='uint32')
+    words_mask = np.array(words, dtype='uint32')
+    raveled_indices, raveled_mask = combine_words(two_words_mask, words_mask)
+    for i in raveled_indices:
+        combined_mask = raveled_mask[i]
+        two_index = i // len(words)
+        third_index = i % len(words)
+        two_groups = two_words_values[two_index]
+        third_mask = words[third_index]
+        for entry in two_groups:
+            if entry[-1] < third_mask:
+                if combined_mask not in three_words:
+                    three_words[combined_mask] = []
+                three_words[combined_mask].append(entry + (third_mask,))
 
-        for two_mask, two_groups in two_words.items():
-            if two_mask & third_mask == 0:
-                for entry in two_groups:
-                    if entry[-1] < third_mask:
-                        combined_mask = two_mask | third_mask
-                        if combined_mask not in three_words:
-                            three_words[combined_mask] = []
-                        three_words[combined_mask].append(entry + (third_mask,))
-    print('\r100.0%')
     print(len(three_words))
 
     print('selecting fourth and fifth words...')
